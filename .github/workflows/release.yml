@@ -114,6 +114,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
+      - get-version
       - build-linux
       - build-macos
     runs-on: ubuntu-latest
@@ -179,10 +180,10 @@ jobs:
 
             ## Binaries
 
-            * [Linux x86_64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-linux-x86_64.tar.gz)
-            * [Linux aarch64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-linux-aarch64.tar.gz)
-            * [macOS x86_64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-macos-x86_64.zip)
-            * [macOS aarch64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-macos-aarch64.zip)
+            * [Linux x86_64](https://github.com/simu/kubectl-split-config/releases/download/${{ needs.get-version.outputs.version }}/kubectl-split_config-linux-x86_64.tar.gz)
+            * [Linux aarch64](https://github.com/simu/kubectl-split-config/releases/download/${{ needs.get-version.outputs.version }}/kubectl-split_config-linux-aarch64.tar.gz)
+            * [macOS x86_64](https://github.com/simu/kubectl-split-config/releases/download/${{ needs.get-version.outputs.version }}/kubectl-split_config-macos-x86_64.zip)
+            * [macOS aarch64](https://github.com/simu/kubectl-split-config/releases/download/${{ needs.get-version.outputs.version }}/kubectl-split_config-macos-aarch64.zip)
           prerelease: "${{ contains(github.ref, '-rc') || contains(github.ref, '-dev') }}"
           # Ensure target branch for release is "main"
           commit: main
