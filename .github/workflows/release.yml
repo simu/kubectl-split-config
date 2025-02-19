@@ -6,6 +6,10 @@ on:
     tags:
       - v*
 
+# required for ncipollo/release-action
+permissions:
+  contents: write
+
 jobs:
   get-version:
     runs-on: ubuntu-latest
@@ -180,7 +184,7 @@ jobs:
             * [macOS x86_64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-macos-x86_64.zip)
             * [macOS aarch64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-macos-aarch64.zip)
           prerelease: "${{ contains(github.ref, '-rc') || contains(github.ref, '-dev') }}"
-          # Ensure target branch for release is "master"
-          commit: master
+          # Ensure target branch for release is "main"
+          commit: main
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: "kubectl-split_config-linux-x86_64.tar.gz,kubectl-split_config-linux-aarch64.tar.gz,kubectl-split_config-macos-x86_64.zip,kubectl-split_config-macos-aarch64.zip"
