@@ -1,0 +1,171 @@
+name: Build release
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            command: cargo
+          - target: aarch64-unknown-linux-musl
+            command: cross
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        id: toolchain
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross
+        if: matrix.command == 'cross'
+        shell: bash
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall --no-confirm cross
+      - name: Cache rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-build-${{ runner.os }}-${{ matrix.target }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install musl tools
+        run: sudo apt-get install -y musl-tools
+      - name: Build binary
+        run: ${{ matrix.command }} build --release --locked --target ${{ matrix.target }}
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubectl-split_config-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/kubectl-split_config
+          retention-days: 7
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        id: toolchain
+        with:
+          targets: ${{ matrix.target }}
+      - name: Cache rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-build-${{ runner.os }}-${{ matrix.target }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('Cargo.lock') }}
+      - name: Build binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubectl-split_config-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/kubectl-split_config
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-linux
+      - build-macos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+      - name: Extract Git version from ref
+        id: git_version
+        run: echo "version=$(echo ${GITHUB_REF#refs/tags/})" >> ${GITHUB_OUTPUT}
+        env:
+          GITHUB_REF: ${{ github.ref }}
+      - name: Read Cargo.toml
+        id: cargo_version
+        uses: SebRollen/toml-action@v1.2.0
+        with:
+          file: Cargo.toml
+          field: package.version
+      - name: Verify that tag matches Cargo.toml version
+        run: |
+          if [ "v${{ steps.cargo_version.outputs.value }}" != "${{ steps.git_version.outputs.version }}" ]; then
+            exit 1
+          fi
+      - name: Build changelog from PRs with labels
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: ".github/changelog-configuration.json"
+          # PreReleases still get a changelog, but the next full release gets a diff since the last full release,
+          # combining possible changelogs of all previous PreReleases in between.
+          # PreReleases show a partial changelog since last PreRelease.
+          ignorePreReleases: "${{ !contains(github.ref, '-rc') }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Read release message from tag commit
+        id: tag_message
+        run: |
+          git fetch origin +refs/tags/*:refs/tags/*
+          # Extract tag message
+          TAG_MSG=$(git tag -n --format='%(contents:body)' ${GITHUB_REF##refs/tags/} | tr -d '\r')
+          # Escape literal % and newlines (\n, \r) for github actions output
+          TAG_MSG=${TAG_MSG//'%'/%25}
+          TAG_MSG=${TAG_MSG//$'\n'/%0A}
+          # Join multiple lines belonging to the same paragraph for GitHub
+          # markdown.
+          # Paragraph breaks should be %0A%0A. We replace single line breaks
+          # with a space with sed.
+          TAG_MSG=$(echo ${TAG_MSG} |sed 's/\([^A]\)%0A\([^%]\)/\1 \2/g')
+          # Set action output `messsage`
+          echo "message=${TAG_MSG}" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_REF: ${{ github.ref }}
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+      - name: Finalize binaries for release
+        run: |
+          chmod +x binaries/kubectl-split_config-x86_64-unknown-linux-musl/kubectl-split_config
+          chmod +x binaries/kubectl-split_config-aarch64-unknown-linux-musl/kubectl-split_config
+          chmod +x binaries/kubectl-split_config-x86_64-apple-darwin/kubectl-split_config
+          chmod +x binaries/kubectl-split_config-aarch64-apple-darwin/kubectl-split_config
+          tar --strip-components 2 -czf kubectl-split_config-linux-x86_64.tar.gz binaries/kubectl-split_config-x86_64-unknown-linux-musl/kubectl-split_config
+          tar --strip-components 2 -czf kubectl-split_config-linux-aarch64.tar.gz binaries/kubectl-split_config-aarch64-unknown-linux-musl/kubectl-split_config
+          zip -j kubectl-split_config-macos-x86_64.zip binaries/kubectl-split_config-x86_64-apple-darwin/kubectl-split_config
+          zip -j kubectl-split_config-macos-aarch64.zip binaries/kubectl-split_config-aarch64-apple-darwin/kubectl-split_config
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          body: |
+            ## Summary
+
+            ${{steps.tag_message.outputs.message}}
+
+            ## Changes
+
+            ${{steps.build_changelog.outputs.changelog}}
+
+            ## Binaries
+
+            * [Linux x86_64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-linux-x86_64.tar.gz)
+            * [Linux aarch64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-linux-aarch64.tar.gz)
+            * [macOS x86_64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-macos-x86_64.zip)
+            * [macOS aarch64](https://github.com/simu/kubectl-split_config/releases/download/${{ steps.git_version.outputs.version }}/kubectl-split_config-macos-aarch64.zip)
+          prerelease: "${{ contains(github.ref, '-rc') || contains(github.ref, '-dev') }}"
+          # Ensure target branch for release is "master"
+          commit: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "kubectl-split_config-linux-x86_64.tar.gz,kubectl-split_config-linux-aarch64.tar.gz,kubectl-split_config-macos-x86_64.zip,kubectl-split_config-macos-aarch64.zip"
