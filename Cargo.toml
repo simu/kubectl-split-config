@@ -1,6 +1,6 @@
 [package]
 name = "kubectl-split_config"
-version = "0.0.0"
+version = "0.0.0-0"
 edition = "2021"
 license = "BSD-3-Clause"
 
