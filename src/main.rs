@@ -24,8 +24,11 @@ struct Cli {
     ///
     /// If the pattern doesn't generate unique names for each context, the tool will exit without
     /// writing any files.
-    #[clap(default_value = "CLUSTER-USER-NAMESPACE.kubeconfig")]
+    #[arg(short, long, default_value = "CLUSTER-USER-NAMESPACE.kubeconfig")]
     output_file_pattern: String,
+    /// Skip contexts which contain this string in their name field when splitting the input file.
+    #[arg(short, long, default_value = None)]
+    skip_string: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -61,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     let outpattern = outparts[outparts.len() - 1];
     let outpath = outparts[..outparts.len() - 1].join(std::path::MAIN_SEPARATOR_STR);
 
-    let context_configs = split_into_contexts(kubeconfig, outpattern)?;
+    let context_configs = split_into_contexts(kubeconfig, outpattern, &args.skip_string)?;
 
     for (fname, cfg) in context_configs {
         let mut s = String::new();
