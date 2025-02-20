@@ -24,7 +24,7 @@ struct Cli {
     ///
     /// If the pattern doesn't generate unique names for each context, the tool will exit without
     /// writing any files.
-    #[clap(default_value = "CLUSTER-USER-NAMESPACE.kubeconfig")]
+    #[arg(short, long, default_value = "CLUSTER-USER-NAMESPACE.kubeconfig")]
     output_file_pattern: String,
 }
 
