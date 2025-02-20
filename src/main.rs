@@ -26,6 +26,9 @@ struct Cli {
     /// writing any files.
     #[arg(short, long, default_value = "CLUSTER-USER-NAMESPACE.kubeconfig")]
     output_file_pattern: String,
+    /// Skip contexts which contain this string in their name field when splitting the input file.
+    #[arg(short, long, default_value = None)]
+    skip_string: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -61,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     let outpattern = outparts[outparts.len() - 1];
     let outpath = outparts[..outparts.len() - 1].join(std::path::MAIN_SEPARATOR_STR);
 
-    let context_configs = split_into_contexts(kubeconfig, outpattern)?;
+    let context_configs = split_into_contexts(kubeconfig, outpattern, &args.skip_string)?;
 
     for (fname, cfg) in context_configs {
         let mut s = String::new();

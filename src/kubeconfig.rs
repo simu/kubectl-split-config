@@ -104,6 +104,7 @@ impl Kubeconfig {
 pub fn split_into_contexts(
     kubeconfig: &Yaml,
     output_file_pattern: &str,
+    skip_string: &Option<String>,
 ) -> anyhow::Result<HashMap<String, Kubeconfig>> {
     let mut res = HashMap::new();
 
@@ -114,6 +115,19 @@ pub fn split_into_contexts(
 
     for ctx in contexts {
         let (ctxname, ctxdata) = read_context(ctx)?;
+        let ctxname_str = ctxname
+            .as_str()
+            .ok_or(anyhow!("context name not a string"))?;
+        if skip_string
+            .as_ref()
+            .is_some_and(|p| ctxname_str.contains(p))
+        {
+            println!(
+                "Skipping context {ctxname_str} which matches {}",
+                skip_string.as_ref().unwrap_or(&"".to_owned())
+            );
+            continue;
+        }
         let cluster_name = read_string(ctxdata, "cluster")?;
         let cluster = find_entry(clusters, cluster_name)?.ok_or(anyhow!(
             "Cluster '{cluster_name}' not present in kubeconfig"
