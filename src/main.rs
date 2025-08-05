@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use clap::Parser;
-use saphyr::{Yaml, YamlEmitter};
+use saphyr::{LoadableYamlNode, Yaml, YamlEmitter};
 
 mod kubeconfig;
 mod yaml;
