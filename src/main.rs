@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{stdin, Read, Write};
 use std::path::PathBuf;
 
 use anyhow::anyhow;
@@ -15,7 +15,10 @@ use kubeconfig::{is_kubeconfig, split_into_contexts};
 #[clap(bin_name = "kubectl_split-config")]
 #[clap(version)]
 struct Cli {
-    /// Kubeconfig file to split
+    /// Kubeconfig file to split.
+    ///
+    /// The command verifies that `file` is a regular file. Additionally, the command accepts
+    /// special value `-` to read the input kubeconfig from standard input.
     file: PathBuf,
     /// Output kubeconfig filename pattern.
     ///
@@ -33,11 +36,15 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    if !args.file.is_file() {
+    let fdata = if args.file.as_os_str() == "-" {
+        let mut buf = String::new();
+        stdin().read_to_string(&mut buf)?;
+        buf
+    } else if !args.file.is_file() {
         return Err(anyhow!("File {} doesn't exist", args.file.display()));
-    }
-
-    let fdata = std::fs::read_to_string(&args.file)?;
+    } else {
+        std::fs::read_to_string(&args.file)?
+    };
     let fcontents = Yaml::load_from_str(&fdata)?;
     if fcontents.len() > 1 {
         return Err(anyhow!(
