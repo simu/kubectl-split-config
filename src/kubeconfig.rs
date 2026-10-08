@@ -137,9 +137,10 @@ pub fn split_into_contexts<'c>(
             .ok_or(anyhow!("User '{user_name}' not present in kubeconfig"))?;
         let mut kubeconfig = Kubeconfig::new();
         kubeconfig.add_context(ctxname, ctx, cluster, user, true)?;
+        let default_ns = Yaml::scalar_from_string("default".into());
         let namespace = ctxdata
             .get(&Yaml::value_from_str("namespace"))
-            .ok_or(anyhow!("no namespace in context"))?
+            .unwrap_or(&default_ns)
             .as_str()
             .ok_or(anyhow!("namespace not string"))?;
         let fname = output_file_pattern.replace("CLUSTER", &cluster_name.replace('/', "_"));
